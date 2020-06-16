@@ -53,6 +53,17 @@ type AuthGithubMapUser struct {
 	value string `json:"value"`
 }
 
+// AuthMethodsResponse result of auth method request
+type AuthMethodsResponse struct {
+	Github interface{} `json:"github/"`
+}
+
+// ActivateAuthRequest holds a sys auth request
+type ActivateAuthRequest struct {
+	description string `json:"description"`
+	typeofAuth  string `json:"type"`
+}
+
 func main() {
 	log.Println("Starting the vault-setup-github service...")
 
@@ -144,9 +155,19 @@ func main() {
 			stop()
 		}
 
-		configureGithubOrganization(token)
-		if githubAdminUser != "" {
-			addGithubAdmin(token)
+		isActivated, err := isGithubActivated(token)
+		if err != nil {
+			log.Println(err)
+			stop()
+		}
+
+		if !isActivated {
+			configureGithubOrganization(token)
+			if githubAdminUser != "" {
+				addGithubAdmin(token)
+			}
+		} else {
+			stop()
 		}
 	default:
 		log.Printf("Vault is in an unknown state. Status code: %d", response.StatusCode)
@@ -188,7 +209,58 @@ func getRootToken() (string, error) {
 	return string(rootToken), nil
 }
 
+func isGithubActivated(rootToken string) (bool, error) {
+	request, err := http.NewRequest("GET", vaultAddr+"/sys/auth", nil)
+	request.Header.Add("X-Vault-Token", string(rootToken))
+
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return false, err
+	}
+
+	defer response.Body.Close()
+
+	authMethodsResponseBody, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return false, err
+	}
+
+	var authMethods AuthMethodsResponse
+
+	if err := json.Unmarshal(authMethodsResponseBody, &authMethods); err != nil {
+		return false, err
+	}
+
+	if authMethods.Github != nil {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
 func configureGithubOrganization(rootToken string) {
+
+	activateAuthRequest := ActivateAuthRequest{
+		description: "Automatically added by vault-setup-github",
+		typeofAuth:  "github",
+	}
+
+	activateAuthRequestData, err := json.Marshal(&activateAuthRequest)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	rard := bytes.NewReader(activateAuthRequestData)
+	actRequest, err := http.NewRequest("POST", vaultAddr+"/v1/sys/auth/github", rard)
+	actRequest.Header.Add("X-Vault-Token", string(rootToken))
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	httpClient.Do(actRequest)
 
 	initRequest := AuthGithubConfigRequest{
 		organization: githubOrganization,
