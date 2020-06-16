@@ -23,7 +23,7 @@ To use this as part of a Kubernetes Vault Deployment:
 ```yaml
 containers:
 - name: vault-setup-github
-  image: registry.hub.docker.com/cobraz/vault-setup-github:0.0.1
+  image: registry.hub.docker.com/cobraz/vault-setup-github:0.0.2
   imagePullPolicy: Always
   env:
   - name: GCS_BUCKET_NAME

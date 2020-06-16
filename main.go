@@ -146,7 +146,7 @@ func main() {
 
 		configureGithubOrganization(token)
 		if githubAdminUser != "" {
-
+			addGithubAdmin(token)
 		}
 	default:
 		log.Printf("Vault is in an unknown state. Status code: %d", response.StatusCode)
