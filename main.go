@@ -45,12 +45,12 @@ var (
 
 // AuthGithubConfigRequest holds a Github Config request
 type AuthGithubConfigRequest struct {
-	organization string `json:"organization"`
+	Organization string `json:"organization"`
 }
 
 // AuthGithubMapUser holds a Github Config request
 type AuthGithubMapUser struct {
-	value string `json:"value"`
+	Value string `json:"value"`
 }
 
 // AuthMethodsResponse result of auth method request
@@ -60,8 +60,13 @@ type AuthMethodsResponse struct {
 
 // ActivateAuthRequest holds a sys auth request
 type ActivateAuthRequest struct {
-	description string `json:"description"`
-	typeofAuth  string `json:"type"`
+	Description string `json:"description"`
+	Type        string `json:"type"`
+}
+
+// AddAdminPolicyRequest holds a create policy request
+type AddAdminPolicyRequest struct {
+	Policy string `json:"policy"`
 }
 
 func main() {
@@ -75,6 +80,9 @@ func main() {
 	vaultInsecureSkipVerify := boolFromEnv("VAULT_SKIP_VERIFY", false)
 
 	githubOrganization = os.Getenv("GITHUB_ORGANIZATION")
+	if githubOrganization == "" {
+		log.Fatal("GITHUB_ORGANIZATION must be set and not empty")
+	}
 
 	githubAdminUser = os.Getenv("GITHUB_ADMIN_USER")
 
@@ -164,6 +172,8 @@ func main() {
 		if !isActivated {
 			log.Println("Github is not activated. Configure it now.")
 			configureGithubOrganization(token)
+			log.Println("Add admin policy")
+			addAdminPolicy(token)
 			if githubAdminUser != "" {
 				log.Println("Adding Github Admin user")
 				addGithubAdmin(token)
@@ -212,7 +222,7 @@ func getRootToken() (string, error) {
 }
 
 func isGithubActivated(rootToken string) (bool, error) {
-	request, err := http.NewRequest("GET", vaultAddr+"/sys/auth", nil)
+	request, err := http.NewRequest("GET", vaultAddr+"/v1/sys/auth", nil)
 	request.Header.Add("X-Vault-Token", string(rootToken))
 
 	response, err := httpClient.Do(request)
@@ -240,11 +250,55 @@ func isGithubActivated(rootToken string) (bool, error) {
 	return false, nil
 }
 
+func addAdminPolicy(rootToken string) {
+	dat, err := ioutil.ReadFile("./admin-policy.hcl")
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	addAdminPolicyRequest := AddAdminPolicyRequest{
+		Policy: string(dat),
+	}
+
+	addAdminPolicyRequestData, err := json.Marshal(&addAdminPolicyRequest)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// log.Println(string(addAdminPolicyRequestData))
+
+	rard := bytes.NewReader(addAdminPolicyRequestData)
+	addPolicyRequest, err := http.NewRequest("PUT", vaultAddr+"/v1/sys/policies/acl/admin", rard)
+	addPolicyRequest.Header.Add("X-Vault-Token", string(rootToken))
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	addPolicyRequestRes, err := httpClient.Do(addPolicyRequest)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	defer addPolicyRequestRes.Body.Close()
+
+	if addPolicyRequestRes.StatusCode != 204 {
+		log.Println("Was not able to add admin policy")
+		return
+	}
+
+}
+
 func configureGithubOrganization(rootToken string) {
 
 	activateAuthRequest := ActivateAuthRequest{
-		description: "Automatically added by vault-setup-github",
-		typeofAuth:  "github",
+		Description: "Automatically added by vault-setup-github",
+		Type:        "github",
 	}
 
 	activateAuthRequestData, err := json.Marshal(&activateAuthRequest)
@@ -271,13 +325,13 @@ func configureGithubOrganization(rootToken string) {
 
 	defer activateAuthRes.Body.Close()
 
-	if activateAuthRes.StatusCode != 200 {
+	if activateAuthRes.StatusCode != 204 {
 		log.Println("Was not able to activate github")
 		return
 	}
 
 	initRequest := AuthGithubConfigRequest{
-		organization: githubOrganization,
+		Organization: githubOrganization,
 	}
 
 	initRequestData, err := json.Marshal(&initRequest)
@@ -302,9 +356,17 @@ func configureGithubOrganization(rootToken string) {
 		return
 	}
 
+	responseBody, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Println(string(responseBody))
+
 	defer response.Body.Close()
 
-	if response.StatusCode != 200 {
+	if response.StatusCode != 204 {
 		log.Println("Was not able to configure Github")
 		return
 	}
@@ -313,7 +375,7 @@ func configureGithubOrganization(rootToken string) {
 func addGithubAdmin(rootToken string) {
 
 	initRequest := AuthGithubMapUser{
-		value: "root",
+		Value: "admin",
 	}
 
 	initRequestData, err := json.Marshal(&initRequest)
@@ -340,7 +402,7 @@ func addGithubAdmin(rootToken string) {
 
 	defer response.Body.Close()
 
-	if response.StatusCode != 200 {
+	if response.StatusCode != 204 {
 		log.Println("Was not able to add administrator user to root policy")
 		return
 	}
