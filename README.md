@@ -4,7 +4,7 @@ The `vault-setup-github` service automates the process of [configuring github au
 
 It uses a root token stored in a Google Cloud Storage](https://cloud.google.com/storage) bucket, named `root-token.enc` and encrypted using [Google Cloud KMS](https://cloud.google.com/kms). Want that to _just happen_? Use [sethvargo/vault-init](https://github.com/sethvargo/vault-init).
 
-This is a companion service too [sethvargo/vault-init](https://github.com/sethvargo/vault-init).
+Can be used as an companion service for [sethvargo/vault-init](https://github.com/sethvargo/vault-init).
 
 ## Usage
 
