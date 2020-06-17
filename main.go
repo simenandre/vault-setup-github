@@ -162,8 +162,10 @@ func main() {
 		}
 
 		if !isActivated {
+			log.Println("Github is not activated. Configure it now.")
 			configureGithubOrganization(token)
 			if githubAdminUser != "" {
+				log.Println("Adding Github Admin user")
 				addGithubAdmin(token)
 			}
 		} else {
@@ -233,9 +235,9 @@ func isGithubActivated(rootToken string) (bool, error) {
 
 	if authMethods.Github != nil {
 		return true, nil
-	} else {
-		return false, nil
 	}
+
+	return false, nil
 }
 
 func configureGithubOrganization(rootToken string) {
@@ -260,7 +262,19 @@ func configureGithubOrganization(rootToken string) {
 		return
 	}
 
-	httpClient.Do(actRequest)
+	activateAuthRes, err := httpClient.Do(actRequest)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	defer activateAuthRes.Body.Close()
+
+	if activateAuthRes.StatusCode != 200 {
+		log.Println("Was not able to activate github")
+		return
+	}
 
 	initRequest := AuthGithubConfigRequest{
 		organization: githubOrganization,
